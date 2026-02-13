@@ -12,10 +12,17 @@ It is a fork/adaptation of the [Tailscale Browser Extension](https://github.com/
 
 ## Features
 
+-   **Selective Routing / "Split Tunneling"**: Unlike the standard Tailscale client which routes *all* traffic when an exit node is selected, this app only routes traffic for applications you explicitly configure to use the proxy. This allows you to use an exit node for just a specific browser, script, or command while keeping the rest of your system on your direct internet connection.
 -   **Userspace Networking**: Runs entirely in userspace using `tsnet`. No root required.
 -   **Exit Node Selection**: Choose any available exit node from your tailnet directly from the GUI.
 -   **Local Proxy**: Exposes a local port (e.g., `1080` or `8080`) that handles both **SOCKS5** and **HTTP CONNECT** traffic.
 -   **Cross-Platform**: Built with Go and Fyne, runs on macOS, Linux, and Windows.
+
+## Use Cases
+
+*   **Geolocated Browsing**: Route one browser window through an exit node in another country to test geo-restricted content, while keeping your main browser on your local connection.
+*   **Development & Testing**: Test your application's behavior from a different network perspective.
+*   **Privacy per App**: Isolate traffic for specific sensitive applications.
 
 ## Installation & Usage
 
