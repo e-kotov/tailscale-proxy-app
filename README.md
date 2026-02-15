@@ -1,5 +1,8 @@
 # Proxy App for Tailscale (Community)
 
+![CI](https://github.com/e-kotov/tailscale-proxy-app/actions/workflows/ci.yml/badge.svg)
+![Release](https://github.com/e-kotov/tailscale-proxy-app/actions/workflows/release.yml/badge.svg)
+
 A standalone GUI application that acts as a local **userspace egress proxy** for Tailscale.
 
 This application allows your computer to route traffic through specific Tailscale Exit Nodes without needing full VPN permissions (root/sudo) or changing system-wide network settings. It exposes a local SOCKS5/HTTP proxy port that you can configure individual applications (like browsers, curl, or development tools) to use.

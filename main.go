@@ -53,7 +53,7 @@ import (
 )
 
 var (
-	version       = "v0.0.2-dev"
+	version       = "v0.0.2"
 	commit        = "none"
 	date          = "unknown"
 	installFlag   = flag.String("install", "", "register the browser extension; string is 'C' (Chrome) or 'F' (Firefox) followed by extension ID")
