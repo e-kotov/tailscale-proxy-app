@@ -56,13 +56,75 @@ sudo dnf install ./proxy-app-for-tailscale.rpm
 brew install e-kotov/tap/proxy-app-for-tailscale
 ```
 
+## Usage Modes
+
+This application can be run in two modes:
+
+### 🎮 GUI Mode (Default)
+Ideal for desktop users.
+```bash
+proxy-app-for-tailscale --gui
+```
+*(On macOS, simply open the `TailscaleProxy.app`)*
+
+### ⌨️ CLI Mode
+Ideal for headless servers, terminal power users, or automation scripts.
+
+**Basic Usage:**
+```bash
+# Start proxy on default port (57320)
+proxy-app-for-tailscale
+
+# Start on a custom port
+proxy-app-for-tailscale --port=8080
+
+# Select an exit node
+proxy-app-for-tailscale --exit-node="us-nyc-wg-101"
+```
+
+**Background / Daemon Mode:**
+The app includes a built-in process manager for convenience.
+```bash
+# Start in background
+proxy-app-for-tailscale --daemon --port=1080 --log-file=proxy.log
+
+# Check status
+proxy-app-for-tailscale --status
+
+# Stop the background process
+proxy-app-for-tailscale --stop
+```
+
+**Available Flags:**
+- `--port`: Local port to listen on (default: `57320`).
+- `--exit-node`: Pre-select an exit node by name or IP.
+- `--daemon`: Run the process in the background.
+- `--stop`: Stop the running background process.
+- `--status`: Check if the background process is running.
+- `--log-file`: Path to a file for logging (default: stderr).
+- `--quiet`: Silence all standard output.
+- `--version`: Show version information.
+
 ## How to use
-1.  **Run:** Open the installed application.
+1.  **Run:** Open the installed application or use the CLI.
 2.  **Connect:**
-    - Log in to Tailscale (follow the instructions in the GUI).
+    - Log in to Tailscale (follow the instructions).
     - Select an exit node (optional).
-    - Click **Connect**.
+    - Click **Connect** (GUI) or it will happen automatically (CLI).
 3.  **Config:** Configure your browser or app to use the proxy (default port: `57320`).
+
+## Development & Local Build
+
+If you want to build the application from source:
+
+```bash
+# Build the macOS App Bundle
+make app
+
+# Build just the CLI binary (Linux/Windows/macOS)
+make cli
+```
+*(Requires Go 1.22+ and a C compiler for Fyne GUI elements).*
 
 ## License
 

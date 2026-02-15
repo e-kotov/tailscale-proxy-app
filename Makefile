@@ -4,7 +4,7 @@ CONTENTS_DIR := $(APP_NAME)/Contents
 MACOS_DIR := $(CONTENTS_DIR)/MacOS
 RESOURCES_DIR := $(CONTENTS_DIR)/Resources
 
-.PHONY: all clean app
+.PHONY: all clean app cli
 
 all: app
 
@@ -38,8 +38,10 @@ app: $(BINARY_NAME)
 	echo '</dict>' >> $(CONTENTS_DIR)/Info.plist
 	echo '</plist>' >> $(CONTENTS_DIR)/Info.plist
 
-$(BINARY_NAME):
+$(BINARY_NAME): main.go
 	go build -o $(BINARY_NAME) .
+
+cli: $(BINARY_NAME)
 
 clean:
 	rm -rf $(APP_NAME) $(BINARY_NAME)

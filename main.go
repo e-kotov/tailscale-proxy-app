@@ -21,6 +21,7 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
 	"os/user"
 	"path/filepath"
@@ -29,6 +30,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/csrf"
@@ -61,10 +63,189 @@ var (
 	proxyFlag     = flag.Bool("proxy", false, "run in CLI proxy mode")
 	verboseFlag   = flag.Bool("verbose", false, "log to stderr in proxy mode")
 	exitNodeFlag  = flag.String("exit-node", "", "exit node name or IP to use in CLI proxy mode")
+	// CLI Flags
+	versionFlag   = flag.Bool("version", false, "display version information")
+	portFlag      = flag.Int("port", 57320, "local port to listen on")
+	logFileFlag   = flag.String("log-file", "", "path to log file")
+	quietFlag     = flag.Bool("quiet", false, "silence all non-error output")
+	daemonFlag    = flag.Bool("daemon", false, "run in background")
+	stopFlag      = flag.Bool("stop", false, "stop the running daemon")
+	statusFlag    = flag.Bool("status", false, "check if the daemon is running")
 )
+
+func getConfigDir() (string, error) {
+	ucd, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	ensureDir := filepath.Join(ucd, "proxy-app-for-tailscale")
+	if err := os.MkdirAll(ensureDir, 0700); err != nil {
+		return "", err
+	}
+	return ensureDir, nil
+}
+
+func getPidFilePath() (string, error) {
+	dir, err := getConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "proxy.pid"), nil
+}
+
+func startDaemon() {
+	pidFile, err := getPidFilePath()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting PID file path: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Check if already running
+	if raw, err := os.ReadFile(pidFile); err == nil {
+		pid, _ := strconv.Atoi(strings.TrimSpace(string(raw)))
+		if proc, err := os.FindProcess(pid); err == nil {
+			if err := proc.Signal(syscall.Signal(0)); err == nil {
+				fmt.Printf("Daemon already running (PID: %d)\n", pid)
+				os.Exit(0)
+			}
+		}
+	}
+
+	exe, err := os.Executable()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting executable path: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Filter out --daemon from args to prevent infinite loop
+	args := []string{}
+	for _, arg := range os.Args[1:] {
+		if arg == "--daemon" || arg == "-daemon" {
+			continue
+		}
+		args = append(args, arg)
+	}
+
+	cmd := exec.Command(exe, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setsid: true, // Detach from terminal
+	}
+	// If logging is not set, discard output to avoid hanging parent
+	if *logFileFlag == "" {
+		cmd.Stdout = nil
+		cmd.Stderr = nil
+	}
+
+	if err := cmd.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to start daemon: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", cmd.Process.Pid)), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to write PID file: %v\n", err)
+	}
+
+	fmt.Printf("Started in background (PID: %d)\n", cmd.Process.Pid)
+	os.Exit(0)
+}
+
+func stopDaemon() {
+	pidFile, err := getPidFilePath()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	raw, err := os.ReadFile(pidFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("Not running (PID file not found).")
+			os.Exit(0)
+		}
+		fmt.Fprintf(os.Stderr, "Error reading PID file: %v\n", err)
+		os.Exit(1)
+	}
+
+	pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid PID file content\n")
+		os.Exit(1)
+	}
+
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		fmt.Println("Process not found.")
+		os.Remove(pidFile)
+		os.Exit(0)
+	}
+
+	if err := proc.Signal(syscall.SIGTERM); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to stop process (PID %d): %v\n", pid, err)
+		os.Exit(1)
+	}
+
+	// Wait for it to die
+	for i := 0; i < 10; i++ {
+		if err := proc.Signal(syscall.Signal(0)); err != nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	
+	os.Remove(pidFile)
+	fmt.Printf("Stopped (PID: %d)\n", pid)
+	os.Exit(0)
+}
+
+func statusDaemon() {
+	pidFile, err := getPidFilePath()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	raw, err := os.ReadFile(pidFile)
+	if err != nil {
+		fmt.Println("Not running.")
+		os.Exit(1)
+	}
+
+	pid, _ := strconv.Atoi(strings.TrimSpace(string(raw)))
+	proc, err := os.FindProcess(pid)
+	if err == nil {
+		if err := proc.Signal(syscall.Signal(0)); err == nil {
+			fmt.Printf("Running (PID: %d)\n", pid)
+			os.Exit(0)
+		}
+	}
+	
+	fmt.Println("Not running (stale PID file).")
+	os.Exit(1)
+}
 
 func main() {
 	flag.Parse()
+
+	if *versionFlag {
+		fmt.Printf("Proxy App for Tailscale (Community) %s\n", version)
+		fmt.Printf("Commit: %s\n", commit)
+		fmt.Printf("Date: %s\n", date)
+		return
+	}
+
+	if *stopFlag {
+		stopDaemon()
+		return
+	}
+
+	if *statusFlag {
+		statusDaemon()
+		return
+	}
+
+	if *daemonFlag {
+		startDaemon()
+	}
 
 	// Start pprof server for debugging memory leaks
 	go func() {
@@ -92,25 +273,11 @@ func main() {
 		return
 	}
 
-	if *proxyFlag {
-		runProxyMode()
-		return
-	}
+	// Default behavior: Start Proxy mode
+	runProxyMode(*portFlag, *logFileFlag, *quietFlag)
+	return
 
-	if flag.NArg() == 0 {
-		fmt.Printf(`ts-browser-ext is the backend for the Tailscale browser extension,
-running as a child process HTTP/SOCKS5 under your browser.
-
-To register it once, run:
-
-     $ ts-browser-ext --install=chrome
-     $ ts-browser-ext --gui
-
-`)
-		return
-	}
-
-	hostinfo.SetApp("ts-browser-ext")
+	hostinfo.SetApp("proxy-app-for-tailscale")
 
 	h := newHost(os.Stdin, os.Stdout)
 	
@@ -277,6 +444,7 @@ type host struct {
 	ws              *web.Server
 	ln              net.Listener
 	wantUp          bool
+	customPort      int
 	// ...
 }
 
@@ -699,10 +867,14 @@ func (h *host) getProxyListenerLocked() net.Listener {
 		return h.ln
 	}
 	var err error
-	// Try default port 57320
-	h.ln, err = net.Listen("tcp", "127.0.0.1:57320")
+	// Try default port 57320 or custom port
+	port := 57320
+	if h.customPort != 0 {
+		port = h.customPort
+	}
+	h.ln, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
-		h.logf("Default port 57320 unavailable (%v), falling back to random port", err)
+		h.logf("Port %d unavailable (%v), falling back to random port", port, err)
 		h.ln, err = net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			panic(err) // TODO: be more graceful
@@ -1486,21 +1658,35 @@ func runGuiMode() {
 	w.ShowAndRun()
 }
 
-func runProxyMode() {
+func runProxyMode(port int, logFile string, quiet bool) {
 	// Pipes for communication
 	cliToHostR, cliToHostW := io.Pipe()
 	hostToCliR, hostToCliW := io.Pipe()
 
 	// Logger setup
-	log.SetOutput(os.Stderr)
+	if quiet {
+		log.SetOutput(io.Discard)
+	} else if logFile != "" {
+		f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to open log file: %v\n", err)
+			os.Exit(1)
+		}
+		log.SetOutput(f)
+	} else {
+		log.SetOutput(os.Stderr)
+	}
 	log.SetFlags(log.Ltime | log.Lshortfile)
 
 	// Start Host
 	go func() {
 		hostinfo.SetApp("ts-browser-ext-cli")
 		h := newHost(cliToHostR, hostToCliW)
+		// Set custom port on the host
+		h.customPort = port
+		
 		h.logf = func(f string, a ...any) {
-			if *verboseFlag {
+			if *verboseFlag || logFile != "" { // Always log if file is set
 				log.Printf("[BACKEND] "+f, a...)
 			}
 		}

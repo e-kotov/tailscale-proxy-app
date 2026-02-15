@@ -17,6 +17,12 @@ This release introduces significant improvements to the Tailscale Proxy GUI, foc
 - **Memory Fixes**: Resolved memory leaks related to the rich text logging buffer and improved the log flusher efficiency.
 - **Auto-scroll Accuracy**: Fixed timing issues where the scroll window wouldn't always snap to the absolute bottom of new entries.
 
+### 3. Dedicated CLI Experience
+- **Daemon Mode**: Built-in process management with `--daemon`, `--stop`, and `--status` commands.
+- **Port Selection**: New `--port` flag to specify a custom listening port (default: `57320`).
+- **Improved Logging**: New `--log-file` and `--quiet` flags for better control over output.
+- **Simplified Usage**: Running without arguments now defaults to proxy mode (removed redundant `--proxy` flag).
+
 ## 📦 What's Included
 - MacOS App Bundle (`TailscaleProxy.app`)
 - Standalone binaries for Windows and Linux.
