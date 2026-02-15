@@ -17,7 +17,7 @@ The project is now split into two independently installable programs:
 ### Installation
 
 - **Homebrew (CLI):** `brew install e-kotov/tap/tailscale-proxy`
-- **macOS GUI:** Download `tailscale-proxy-app_*_macOS_*.tar.gz` from Releases
+- **macOS GUI:** `brew install --cask e-kotov/tap/tailscale-proxy-app` (or download from Releases)
 - **Linux/Windows:** Download from Releases or use package manager
 
 ### State Directories
