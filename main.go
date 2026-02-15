@@ -146,9 +146,7 @@ func startDaemon() {
 	}
 
 	cmd := exec.Command(exe, args...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setsid: true, // Detach from terminal
-	}
+	cmd.SysProcAttr = getSysProcAttr()
 	// If logging is not set, discard output to avoid hanging parent
 	if *logFileFlag == "" {
 		cmd.Stdout = nil
