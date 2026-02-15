@@ -546,6 +546,7 @@ type host struct {
 	ln              net.Listener
 	wantUp          bool
 	customPort      int
+	dialer          func(ctx context.Context, network, addr string) (net.Conn, error)
 	// ...
 }
 
@@ -562,6 +563,15 @@ func newHost(r io.Reader, w io.Writer) *host {
 		Logf: func(f string, a ...any) {
 			h.logf(f, a...)
 		},
+	}
+	h.dialer = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		h.mu.Lock()
+		sys := h.ts.Sys()
+		h.mu.Unlock()
+		if sys == nil {
+			return nil, fmt.Errorf("no tsnet.Server")
+		}
+		return sys.Dialer.Get().UserDial(ctx, network, addr)
 	}
 	return h
 }
@@ -1094,16 +1104,10 @@ func (h *host) restartListener(port int) error {
 }
 
 func (h *host) userDial(ctx context.Context, netw, addr string) (net.Conn, error) {
-	h.mu.Lock()
-	sys := h.ts.Sys()
-	h.mu.Unlock()
-
-	if sys == nil {
-		h.logf("userDial to %v/%v without a tsnet.Server started", netw, addr)
-		return nil, fmt.Errorf("no tsnet.Server")
+	if h.dialer != nil {
+		return h.dialer(ctx, netw, addr)
 	}
-
-	return sys.Dialer.Get().UserDial(ctx, netw, addr)
+	return nil, fmt.Errorf("no dialer configured")
 }
 
 func (h *host) sendStatus() {
