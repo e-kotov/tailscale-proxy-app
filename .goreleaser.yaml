@@ -45,35 +45,9 @@ builds:
           - CC=/llvm-mingw/bin/aarch64-w64-mingw32-gcc
           - CXX=/llvm-mingw/bin/aarch64-w64-mingw32-g++
 
-  - id: macos
-    env:
-      - CGO_ENABLED=1
-    goos:
-      - darwin
-    goarch:
-      - amd64
-      - arm64
-    main: .
-    flags:
-      - -tags=urfave_cli_no_docs
-    ldflags:
-      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
-    overrides:
-      - goos: darwin
-        goarch: amd64
-        env:
-          - CC=o64-clang
-          - CXX=o64-clang++
-      - goos: darwin
-        goarch: arm64
-        env:
-          - CC=oa64-clang
-          - CXX=oa64-clang++
-
 archives:
   - builds:
       - default
-      - macos
     formats:
       - tar.gz
     # this name template makes the OS and Arch compatible with what users expect
@@ -103,17 +77,6 @@ nfpms:
         file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
       rpm:
         file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
-
-brews:
-  - repository:
-      owner: e-kotov
-      name: homebrew-tap
-    directory: Formula
-    homepage: https://github.com/e-kotov/tailscale-proxy-app
-    description: Standalone userspace egress proxy for Tailscale exit nodes (no root required). It exposes a local HTTP/SOCKS5 proxy that routes traffic through any of your tailnet's exit nodes.
-    license: BSD-3-Clause
-    test: |
-      system "#{bin}/tailscale-proxy-app --version"
 
 scoops:
   - repository:
