@@ -22,6 +22,23 @@ builds:
       - -tags=urfave_cli_no_docs
     ldflags:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+    overrides:
+      - goos: linux
+        goarch: amd64
+        env:
+          - CC=x86_64-linux-gnu-gcc
+      - goos: linux
+        goarch: arm64
+        env:
+          - CC=aarch64-linux-gnu-gcc
+      - goos: windows
+        goarch: amd64
+        env:
+          - CC=x86_64-w64-mingw32-gcc
+      - goos: windows
+        goarch: arm64
+        env:
+          - CC=aarch64-w64-mingw32-gcc
 
   - id: macos
     env:
@@ -36,6 +53,15 @@ builds:
       - -tags=urfave_cli_no_docs
     ldflags:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+    overrides:
+      - goos: darwin
+        goarch: amd64
+        env:
+          - CC=o64-clang
+      - goos: darwin
+        goarch: arm64
+        env:
+          - CC=oa64-clang
 
 archives:
   - builds:
