@@ -70,20 +70,20 @@ proxy-app-for-tailscale --gui
 ### ⌨️ CLI Mode
 Ideal for headless servers, terminal power users, or automation scripts.
 
-**Basic Usage:**
+**First Run / Authentication:**
+To log in, run the app interactively once. It will print a login URL if needed.
 ```bash
-# Start proxy on default port (57320)
+# Run interactively to authenticate
 proxy-app-for-tailscale
-
-# Start on a custom port
-proxy-app-for-tailscale --port=8080
-
-# Select an exit node
-proxy-app-for-tailscale --exit-node="us-nyc-wg-101"
+# Output: Auth Required! Please visit: https://login.tailscale.com/...
+```
+*Alternatively, use a headless auth key:*
+```bash
+proxy-app-for-tailscale --auth-key="tskey-auth-..."
 ```
 
 **Background / Daemon Mode:**
-The app includes a built-in process manager for convenience.
+Once authenticated (or if using an auth-key), you can run as a background service.
 ```bash
 # Start in background
 proxy-app-for-tailscale --daemon --port=1080 --log-file=proxy.log
@@ -93,16 +93,23 @@ proxy-app-for-tailscale --status
 
 # Stop the background process
 proxy-app-for-tailscale --stop
+
+# Logout (clear state)
+proxy-app-for-tailscale --logout
 ```
 
-**Available Flags:**
+**Available Flags (as of v.0.0.2 - may change closer to more stable release!):**
 - `--port`: Local port to listen on (default: `57320`).
 - `--exit-node`: Pre-select an exit node by name or IP.
+- `--hostname`: Hostname to use for the Tailscale node (default: `proxy-app-for-tailscale`).
 - `--daemon`: Run the process in the background.
 - `--stop`: Stop the running background process.
 - `--status`: Check if the background process is running.
 - `--log-file`: Path to a file for logging (default: stderr).
 - `--quiet`: Silence all standard output.
+- `--logout`: Force logout and remove state data.
+- `--auth-key`: Provide a Tailscale Auth Key for headless login (e.g. `tskey-auth-...`).
+- `--pprof-port`: Port to listen on for pprof debugging (default: 0/disabled).
 - `--version`: Show version information.
 
 ## How to use

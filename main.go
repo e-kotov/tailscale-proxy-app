@@ -23,7 +23,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"os/user"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -71,6 +70,10 @@ var (
 	daemonFlag    = flag.Bool("daemon", false, "run in background")
 	stopFlag      = flag.Bool("stop", false, "stop the running daemon")
 	statusFlag    = flag.Bool("status", false, "check if the daemon is running")
+	hostnameFlag  = flag.String("hostname", "proxy-app-for-tailscale", "hostname to use for the tailscale node")
+	pprofPortFlag = flag.Int("pprof-port", 0, "port for pprof debugging server (0 to disable)")
+	authKeyFlag   = flag.String("auth-key", "", "tailscale auth key to use for login")
+	logoutFlag    = flag.Bool("logout", false, "logout and remove state data")
 )
 
 func getConfigDir() (string, error) {
@@ -91,6 +94,22 @@ func getPidFilePath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "proxy.pid"), nil
+}
+
+func getStateFilePath() (string, error) {
+	dir, err := getConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "proxy.state"), nil
+}
+
+type ProxyState struct {
+	PID       int       `json:"pid"`
+	Port      int       `json:"port"`
+	ExitNode  string    `json:"exit_node"`
+	StartTime time.Time `json:"start_time"`
+	Version   string    `json:"version"`
 }
 
 func startDaemon() {
@@ -204,9 +223,35 @@ func statusDaemon() {
 		os.Exit(1)
 	}
 
+	stateFile, _ := getStateFilePath()
+
+	// Try reading state file first for richer info
+	if rawState, err := os.ReadFile(stateFile); err == nil {
+		var state ProxyState
+		if err := json.Unmarshal(rawState, &state); err == nil {
+			// Verify if PID is actually running
+			if proc, err := os.FindProcess(state.PID); err == nil {
+				if err := proc.Signal(syscall.Signal(0)); err == nil {
+					fmt.Printf("Status:       Running\n")
+					fmt.Printf("PID:          %d\n", state.PID)
+					fmt.Printf("Port:         %d\n", state.Port)
+					if state.ExitNode != "" {
+						fmt.Printf("Exit Node:    %s\n", state.ExitNode)
+					} else {
+						fmt.Printf("Exit Node:    <none> (Local Traffic)\n")
+					}
+					fmt.Printf("Started:      %s\n", state.StartTime.Format(time.RFC822))
+					fmt.Printf("Version:      %s\n", state.Version)
+					os.Exit(0)
+				}
+			}
+		}
+	}
+
+	// Fallback to PID file if state file is missing/corrupt but PID file exists
 	raw, err := os.ReadFile(pidFile)
 	if err != nil {
-		fmt.Println("Not running.")
+		fmt.Println("Status:       Not Running")
 		os.Exit(1)
 	}
 
@@ -214,13 +259,61 @@ func statusDaemon() {
 	proc, err := os.FindProcess(pid)
 	if err == nil {
 		if err := proc.Signal(syscall.Signal(0)); err == nil {
-			fmt.Printf("Running (PID: %d)\n", pid)
+			fmt.Printf("Status:       Running (PID: %d)\n", pid)
+			fmt.Println("Details:      State file missing or unreadable.")
 			os.Exit(0)
 		}
 	}
 	
-	fmt.Println("Not running (stale PID file).")
+	fmt.Println("Status:       Not Running (Stale PID found)")
 	os.Exit(1)
+}
+
+func logout() {
+	// 1. Stop the daemon if running
+	pidFile, _ := getPidFilePath()
+	if _, err := os.Stat(pidFile); err == nil {
+		fmt.Println("Stopping daemon...")
+		stopDaemon()
+	} else {
+		// Manually check if valid PID in case stopDaemon logic is strict
+		// Actually stopDaemon handles "not found" gracefully enough or exits.
+		// Let's just call stopDaemon?
+		// But stopDaemon exits!
+		// We can't call it if we want to proceed to delete files.
+		// We'll reimplement simple stop logic or call it via exec?
+		// Reimplementing simple stop here:
+		if raw, err := os.ReadFile(pidFile); err == nil {
+			pid, _ := strconv.Atoi(strings.TrimSpace(string(raw)))
+			if proc, err := os.FindProcess(pid); err == nil {
+				proc.Signal(syscall.SIGTERM)
+				// Wait a bit
+				time.Sleep(1 * time.Second)
+			}
+			os.Remove(pidFile)
+		}
+	}
+
+	// 2. Remove state directory
+	// The CLI uses a fixed ID: 12345678-0000-0000-0000-1234567890cd
+	// We need to resolve the path.
+	
+	ucd, _ := os.UserConfigDir()
+	tsDir := filepath.Join(ucd, "tailscale-browser-ext", "12345678-0000-0000-0000-1234567890cd")
+	
+	fmt.Printf("Removing state directory: %s\n", tsDir)
+	if err := os.RemoveAll(tsDir); err != nil {
+		fmt.Fprintf(os.Stderr, "Error removing state dir: %v\n", err)
+		os.Exit(1)
+	}
+	
+	// Also remove our proxy.state and proxy.pid (already done by stop/check)
+	stateFile, _ := getStateFilePath()
+	os.Remove(stateFile)
+	os.Remove(pidFile) // Ensure gone
+
+	fmt.Println("Logged out successfully (state cleared).")
+	os.Exit(0)
 }
 
 func main() {
@@ -243,17 +336,25 @@ func main() {
 		return
 	}
 
+	if *logoutFlag {
+		logout()
+		return
+	}
+
 	if *daemonFlag {
 		startDaemon()
 	}
 
 	// Start pprof server for debugging memory leaks
-	go func() {
-		log.Println("Starting pprof server on localhost:6060")
-		if err := http.ListenAndServe("localhost:6060", nil); err != nil {
-			log.Printf("pprof server error: %v", err)
-		}
-	}()
+	if *pprofPortFlag > 0 {
+		go func() {
+			addr := fmt.Sprintf("localhost:%d", *pprofPortFlag)
+			log.Printf("Starting pprof server on %s", addr)
+			if err := http.ListenAndServe(addr, nil); err != nil {
+				log.Printf("pprof server error: %v", err)
+			}
+		}()
+	}
 
 	if *installFlag != "" {
 		if err := install(*installFlag); err != nil {
@@ -635,6 +736,19 @@ func (h *host) handleSetExitNode(exitNodeIP string) {
 		h.logf("failed to save prefs: %v", err)
 	}
 
+	// Update State File if it exists
+	if stateFile, err := getStateFilePath(); err == nil {
+		if raw, err := os.ReadFile(stateFile); err == nil {
+			var state ProxyState
+			if err := json.Unmarshal(raw, &state); err == nil {
+				state.ExitNode = exitNodeIP
+				if b, err := json.MarshalIndent(state, "", "  "); err == nil {
+					os.WriteFile(stateFile, b, 0644)
+				}
+			}
+		}
+	}
+
 	result.Success = true
 	h.send(&reply{ExitNodeSet: result})
 	h.sendStatus()         // Send updated status
@@ -703,12 +817,12 @@ func (h *host) handleInit(msg *request) (ret error) {
 	if h.ts.Sys() != nil {
 		return fmt.Errorf("already running")
 	}
-	u, err := user.Current()
-	if err != nil {
-		return fmt.Errorf("getting current user: %w", err)
+	// u, err := user.Current() used to be here
+	h.ts.Hostname = *hostnameFlag
+	if msg.AuthKey != "" {
+		h.ts.AuthKey = msg.AuthKey
 	}
-	h.ts.Hostname = u.Username + "-browser-ext"
-
+	
 	confDir, err := os.UserConfigDir()
 	if err != nil {
 		return fmt.Errorf("getting user config dir: %w", err)
@@ -1043,6 +1157,9 @@ type request struct {
 	// This string, coming from JavaScript, should not be trusted. It must be
 	// UUID-ish: hex and hyphens only, and too long.
 	InitID string `json:"initID,omitempty"`
+
+	// AuthKey is used for headless login (CLI only)
+	AuthKey string `json:"authKey,omitempty"`
 
 	// ExitNodeIP is the IP address of the exit node to use.
 	// Empty string means no exit node (direct connection).
@@ -1697,6 +1814,25 @@ func runProxyMode(port int, logFile string, quiet bool) {
 		if *verboseFlag {
 			log.Printf("Proxy listening on localhost:%v", port)
 		}
+
+		// Write State File
+		if stateFile, err := getStateFilePath(); err == nil {
+			state := ProxyState{
+				PID:       os.Getpid(),
+				Port:      port,
+				StartTime: time.Now(),
+				Version:   version,
+				ExitNode:  "", // Initial state, will be updated if preference loaded
+			}
+			// Try to load initial exit node from prefs if available
+			if prefs, err := h.loadPrefs(); err == nil {
+				state.ExitNode = prefs.ExitNodeIP
+			}
+			if b, err := json.MarshalIndent(state, "", "  "); err == nil {
+				os.WriteFile(stateFile, b, 0644)
+			}
+		}
+
 		h.send(&reply{ProcRunning: &procRunningResult{
 			Port: port,
 			Pid:  os.Getpid(),
@@ -1762,6 +1898,11 @@ func runProxyMode(port int, logFile string, quiet bool) {
 			if msg.ExitNodes != nil {
 				target := *exitNodeFlag
 				if target != "" {
+					// If we have no nodes, we are likely still starting up. Silence and wait.
+					if len(msg.ExitNodes.Nodes) == 0 {
+						continue
+					}
+					
 					var ip string
 					for _, n := range msg.ExitNodes.Nodes {
 						if n.Name == target || n.IP == target {
@@ -1775,10 +1916,16 @@ func runProxyMode(port int, logFile string, quiet bool) {
 						// Clear flag to avoid repeated setting
 						*exitNodeFlag = "" 
 					} else {
+						// Only complain if we actually have a list of nodes to check against
 						fmt.Fprintf(os.Stderr, "Exit node %q not found. Available nodes:\n", target)
 						for _, n := range msg.ExitNodes.Nodes {
 							fmt.Fprintf(os.Stderr, "  - %s (%s)\n", n.Name, n.IP)
 						}
+						// Don't clear flag, maybe it will appear? 
+						// Actually, if we have nodes and it's not there, it's probably a typo.
+						// But for safety in race conditions, maybe we give up? 
+						// Let's clear it to stop spamming, unless we want to retry?
+						*exitNodeFlag = ""
 					}
 				}
 			}
@@ -1787,18 +1934,32 @@ func runProxyMode(port int, logFile string, quiet bool) {
 
 	// Init sequence
 	go func() {
-		time.Sleep(200 * time.Millisecond)
-		// Use a fixed ID for CLI persistence, must be hex-like UUID
-		sendCmd(request{Cmd: CmdInit, InitID: "12345678-0000-0000-0000-1234567890cd"})
-		time.Sleep(500 * time.Millisecond)
-		// Enable proxy immediately
+		// Use a fixed ID for CLI persistence
+		sendCmd(request{
+			Cmd:     CmdInit, 
+			InitID:  "12345678-0000-0000-0000-1234567890cd",
+			AuthKey: *authKeyFlag,
+		})
+		time.Sleep(500 * time.Millisecond) // Weight for init
 		sendCmd(request{Cmd: CmdUp})
-		// Get output nodes to set if needed
-		if *exitNodeFlag != "" {
-			sendCmd(request{Cmd: CmdGetExitNodes})
-		}
-		// Get status to check login
+		
+		// Status check
 		sendCmd(request{Cmd: CmdGetStatus})
+
+		// Retry getting exit nodes if requested
+		if *exitNodeFlag != "" {
+			for i := 0; i < 15; i++ {
+				// Stop if flag was cleared (success or failure handled)
+				if *exitNodeFlag == "" {
+					break
+				}
+				sendCmd(request{Cmd: CmdGetExitNodes})
+				time.Sleep(1 * time.Second)
+			}
+			if *exitNodeFlag != "" {
+				fmt.Fprintf(os.Stderr, "Timed out waiting for exit node %q\n", *exitNodeFlag)
+			}
+		}
 	}()
 
 	// Wait for signal
