@@ -39,7 +39,7 @@ archives:
         format: zip
 
 nfpms:
-  - maintainer: Eugene Kotov <e.kotov@gmail.com>
+  - maintainer: Egor Kotov <e.kotov@gmail.com>
     description: Independent Community Proxy for Tailscale
     homepage: https://github.com/e-kotov/tailscale-proxy-app
     license: BSD-3-Clause
