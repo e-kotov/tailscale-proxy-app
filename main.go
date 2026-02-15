@@ -16,6 +16,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	_ "net/http/pprof" // Register pprof handlers
+
 	"net/netip"
 	"net/url"
 	"os"
@@ -59,6 +61,15 @@ var (
 
 func main() {
 	flag.Parse()
+
+	// Start pprof server for debugging memory leaks
+	go func() {
+		log.Println("Starting pprof server on localhost:6060")
+		if err := http.ListenAndServe("localhost:6060", nil); err != nil {
+			log.Printf("pprof server error: %v", err)
+		}
+	}()
+
 	if *installFlag != "" {
 		if err := install(*installFlag); err != nil {
 			log.Fatalf("installation error: %v", err)
@@ -626,13 +637,20 @@ func (h *host) getProxyListenerLocked() net.Listener {
 	socksListener, httpListener := proxymux.SplitSOCKSAndHTTP(h.ln)
 
 	hs := &http.Server{Handler: h.httpProxyHandler()}
+	if !*verboseFlag {
+		hs.ErrorLog = log.New(io.Discard, "", 0)
+	}
 	go func() {
 		if err := hs.Serve(httpListener); err != nil && err != http.ErrServerClosed {
 			log.Printf("HTTP proxy exited: %v", err)
 		}
 	}()
 	ss := &socks5.Server{
-		Logf:   logger.WithPrefix(h.logf, "socks5: "),
+		Logf: func(f string, v ...interface{}) {
+			if *verboseFlag {
+				h.logf("socks5: "+f, v...)
+			}
+		},
 		Dialer: h.userDial,
 	}
 	go func() {
@@ -677,13 +695,20 @@ func (h *host) restartListener(port int) error {
 	
 	socksListener, httpListener := proxymux.SplitSOCKSAndHTTP(h.ln)
 	hs := &http.Server{Handler: h.httpProxyHandler()}
+	if !*verboseFlag {
+		hs.ErrorLog = log.New(io.Discard, "", 0)
+	}
 	go func() {
 		if err := hs.Serve(httpListener); err != nil && err != http.ErrServerClosed {
 			log.Printf("HTTP proxy exited: %v", err)
 		}
 	}()
 	ss := &socks5.Server{
-		Logf:   logger.WithPrefix(h.logf, "socks5: "),
+		Logf: func(f string, v ...interface{}) {
+			if *verboseFlag {
+				h.logf("socks5: "+f, v...)
+			}
+		},
 		Dialer: h.userDial,
 	}
 	go func() {
