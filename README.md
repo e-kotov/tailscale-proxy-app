@@ -1,4 +1,4 @@
-# Tailscale Proxy App (Experimental)
+# Proxy App for Tailscale (Community)
 
 A standalone GUI application that acts as a local **userspace egress proxy** for Tailscale.
 

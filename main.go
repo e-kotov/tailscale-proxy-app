@@ -46,6 +46,7 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
@@ -404,6 +405,12 @@ func (h *host) handleGetExitNodes() {
 	}
 	
 	h.logf("Found %d exit nodes", len(result.Nodes))
+
+	// Include saved default IP for GUI marking
+	if prefs, err := h.loadPrefs(); err == nil {
+		result.SavedDefaultIP = prefs.ExitNodeIP
+	}
+
 	h.send(&reply{ExitNodes: result})
 }
 
@@ -452,9 +459,15 @@ func (h *host) handleSetExitNode(exitNodeIP string) {
 		return
 	}
 
+	// Save preference
+	if err := h.savePrefs(&preferences{ExitNodeIP: exitNodeIP}); err != nil {
+		h.logf("failed to save prefs: %v", err)
+	}
+
 	result.Success = true
 	h.send(&reply{ExitNodeSet: result})
-	h.sendStatus() // Send updated status
+	h.sendStatus()         // Send updated status
+	h.handleGetExitNodes() // Refresh exit nodes to update SavedDefaultIP in GUI
 }
 
 func (h *host) setWantRunning(want bool) error {
@@ -556,6 +569,28 @@ func (h *host) handleInit(msg *request) (ret error) {
 		return fmt.Errorf("NewServer: %w", err)
 	}
 
+	// Restore preferences
+	if prefs, err := h.loadPrefs(); err == nil && prefs.ExitNodeIP != "" {
+		h.logf("Restoring exit node: %s", prefs.ExitNodeIP)
+		ip, err := netip.ParseAddr(prefs.ExitNodeIP)
+		if err == nil {
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if _, err := lc.EditPrefs(ctx, &ipn.MaskedPrefs{
+					ExitNodeIPSet: true,
+					ExitNodeIDSet: true,
+					Prefs: ipn.Prefs{
+						ExitNodeIP: ip,
+						ExitNodeID: "",
+					},
+				}); err != nil {
+					h.logf("failed to restore exit node: %v", err)
+				}
+			}()
+		}
+	}
+
 	return nil
 }
 
@@ -598,6 +633,37 @@ func (h *host) updateFromWatcher(wc *tailscale.IPNBusWatcher) bool {
 	return true
 }
 
+type preferences struct {
+	ExitNodeIP string `json:"exitNodeIP"`
+}
+
+func (h *host) getPrefsPath() string {
+	return filepath.Join(h.ts.Dir, "params.json")
+}
+
+func (h *host) loadPrefs() (*preferences, error) {
+	p := new(preferences)
+	b, err := os.ReadFile(h.getPrefsPath())
+	if os.IsNotExist(err) {
+		return p, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(b, p); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+func (h *host) savePrefs(p *preferences) error {
+	b, err := json.Marshal(p)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(h.getPrefsPath(), b, 0644)
+}
+
 func (h *host) send(msg *reply) error {
 	msgb, err := json.Marshal(msg)
 	if err != nil {
@@ -630,9 +696,14 @@ func (h *host) getProxyListenerLocked() net.Listener {
 		return h.ln
 	}
 	var err error
-	h.ln, err = net.Listen("tcp", "127.0.0.1:0")
+	// Try default port 57320
+	h.ln, err = net.Listen("tcp", "127.0.0.1:57320")
 	if err != nil {
-		panic(err) // TODO: be more graceful
+		h.logf("Default port 57320 unavailable (%v), falling back to random port", err)
+		h.ln, err = net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			panic(err) // TODO: be more graceful
+		}
 	}
 	socksListener, httpListener := proxymux.SplitSOCKSAndHTTP(h.ln)
 
@@ -750,6 +821,7 @@ func (h *host) sendStatus() {
 	st := &status{}
 	h.mu.Lock()
 	st.Running = h.lastState == ipn.Running
+	st.State = h.lastState.String()
 	if nm := h.lastNetmap; nm != nil {
 		st.Tailnet = nm.Domain
 	}
@@ -829,9 +901,10 @@ type exitNode struct {
 
 // exitNodesResult is the response to a get-exit-nodes command.
 type exitNodesResult struct {
-	Nodes       []exitNode `json:"nodes"`
-	CurrentNode string     `json:"currentNode"` // IP of currently selected exit node, empty if none
-	Error       string     `json:"error,omitempty"`
+	Nodes          []exitNode `json:"nodes"`
+	CurrentNode    string     `json:"currentNode"` // IP of currently selected exit node, empty if none
+	SavedDefaultIP string     `json:"savedDefaultIP"`
+	Error          string     `json:"error,omitempty"`
 }
 
 // exitNodeSetResult is the response to a set-exit-node command.
@@ -852,6 +925,7 @@ type initResult struct {
 
 type status struct {
 	Running bool   `json:"running"`
+	State   string `json:"state"`
 	Tailnet string `json:"tailnet"`
 	Error   string `json:"error,omitempty"`
 
@@ -950,7 +1024,7 @@ func (h *host) httpProxyHandler() http.Handler {
 
 func runGuiMode() {
 	a := app.New()
-	w := a.NewWindow("Tailscale Proxy")
+	w := a.NewWindow("Proxy App for Tailscale (Community) v0.0.2")
 
 	// Host <-> GUI communication pipes
 	guiToHostR, guiToHostW := io.Pipe()
@@ -982,6 +1056,9 @@ func runGuiMode() {
 		}
 	}()
 
+	// GUI Verbose log toggle (defaults to false unless --verbose was passed)
+	guiVerbose := *verboseFlag
+
 	// Helper to send commands (non-blocking)
 	sendCmd := func(cmd request) {
 		select {
@@ -998,7 +1075,6 @@ func runGuiMode() {
 
 	// Rich Logs
 	richLogs := widget.NewRichText()
-	richLogs.Scroll = container.ScrollBoth
 	richLogs.Wrapping = fyne.TextWrapBreak
 	
 	
@@ -1032,6 +1108,16 @@ func runGuiMode() {
 		}
 	}
 
+	// Helper to clear logs (explicitly free memory)
+	clearLogs := func() {
+		richLogs.Segments = nil
+		richLogs.Refresh()
+		addLog("Logs cleared.")
+	}
+
+	// Auto-scroll toggle
+	autoScroll := true
+
 	// Log flusher goroutine - drains logChan and updates UI periodically
 	go func() {
 		ticker := time.NewTicker(200 * time.Millisecond)
@@ -1058,6 +1144,10 @@ func runGuiMode() {
 				richLogs.Segments = richLogs.Segments[len(richLogs.Segments)-150:]
 			}
 			richLogs.Refresh()
+			if autoScroll {
+				logScroll.Refresh()
+				logScroll.ScrollToBottom()
+			}
 		}
 	}()
 
@@ -1068,7 +1158,33 @@ func runGuiMode() {
 		
 		h.logf = func(f string, a ...any) {
 			msg := fmt.Sprintf(f, a...)
+			
+			// Always log to stderr/stdout for debugging
 			log.Println(msg)
+
+			// Aggressive Filter for GUI logs
+			if !guiVerbose {
+				cleanMsg := regexp.MustCompile(`\x1b\[[0-9;]*m`).ReplaceAllString(msg, "")
+				lower := strings.ToLower(cleanMsg)
+				
+				// Block anything starting with [ (backend noise)
+				if strings.HasPrefix(cleanMsg, "[") {
+					return
+				}
+				
+				// Block protocol/internal noise
+				noise := []string{
+					"magicsock:", "wg:", "control:", "dns:", "wrapper:", 
+					"netmap", "monitor:", "link change:", "health(", 
+					"endpoints:", "derp", "program starting", "sent reply", 
+					"got command", "starting...", "link state", "onportupdate",
+				}
+				for _, p := range noise {
+					if strings.Contains(lower, p) {
+						return
+					}
+				}
+			}
 			addLog(msg)
 		}
 
@@ -1118,22 +1234,38 @@ func runGuiMode() {
 	})
 	loginBtn.Hide()
 
+	var currentSelection string = "None (Direct)"
+	
 	exitNodeSelect := widget.NewSelect([]string{"Loading nodes..."}, func(selected string) {
+		cleanSelected := strings.TrimSuffix(selected, " (default)")
+		currentSelection = cleanSelected
 		if selected == "Loading nodes..." {
 			return
 		}
-		if selected == "None (Direct)" {
+		if cleanSelected == "None (Direct)" {
 			sendCmd(request{Cmd: CmdSetExitNode, ExitNodeIP: ""})
+			addLog("Set to Direct Mode (preference saved)")
 			return
 		}
 		for _, node := range exitNodes {
-			if node.Name == selected {
+			if node.Name == cleanSelected {
 				sendCmd(request{Cmd: CmdSetExitNode, ExitNodeIP: node.IP})
+				addLog(fmt.Sprintf("Set Exit Node to %s (preference saved)", cleanSelected))
 				return
 			}
 		}
 	})
 	exitNodeSelect.PlaceHolder = "Loading nodes..."
+
+	// Button to explicitly save default (re-applies current selection)
+	saveDefaultBtn := widget.NewButton("Make Default", func() {
+		if currentSelection == "" || currentSelection == "Loading nodes..." {
+			return
+		}
+		addLog(fmt.Sprintf("Saving %s as default...", currentSelection))
+		// Re-trigger the logic
+		exitNodeSelect.OnChanged(currentSelection)
+	})
 
 	var connectBtn *widget.Button
 	connectBtn = widget.NewButton("Connect to Tailscale", func() {
@@ -1175,56 +1307,63 @@ func runGuiMode() {
 				portEntry.SetText(strconv.Itoa(msg.ProcRunning.Port))
 			}
 			if msg.Status != nil {
-				statusText := fmt.Sprintf("Status: Running=%v", msg.Status.Running)
+				statusText := "Status: Disconnected"
 				if msg.Status.Running {
 					statusText = "Status: Connected"
-				} else {
-					statusText = "Status: Disconnected"
-				}
-				
-				if msg.Status.NeedsLogin {
+				} else if msg.Status.State == "Starting" {
+					statusText = "Status: Connecting..."
+				} else if msg.Status.State == "NeedsLogin" || msg.Status.NeedsLogin {
 					statusText = "Status: Login Required"
+				} else if msg.Status.State != "" && msg.Status.State != "Stopped" && msg.Status.State != "NoState" {
+					statusText = "Status: " + msg.Status.State
+				}
+
+				if msg.Status.NeedsLogin {
 					loginURL = msg.Status.BrowseToURL
 					loginBtn.Show()
 				} else {
 					loginBtn.Hide()
 				}
 				statusData.Set(statusText)
+				
+				// Reset button state based on actual status
 				if msg.Status.Running {
 					connectBtn.SetText("Disconnect")
 					connectBtn.Importance = widget.DangerImportance
+					connectBtn.Enable()
+				} else if msg.Status.State == "Starting" {
+					connectBtn.SetText("Connecting...")
+					connectBtn.Disable()
 				} else {
 					connectBtn.SetText("Connect to Tailscale")
 					connectBtn.Importance = widget.HighImportance
+					connectBtn.Enable()
 				}
-				connectBtn.Enable()
 			}
 			if msg.ExitNodes != nil {
 				var options []string
 				options = append(options, "None (Direct)")
 				exitNodes = msg.ExitNodes.Nodes
+				var selectedText string = "None (Direct)"
+
 				for _, n := range exitNodes {
-					options = append(options, n.Name)
+					name := n.Name
+					if n.IP == msg.ExitNodes.SavedDefaultIP {
+						name += " (default)"
+					}
+					options = append(options, name)
+					if n.IP == msg.ExitNodes.CurrentNode {
+						selectedText = name
+					}
 				}
 				exitNodeSelect.Options = options
 				exitNodeSelect.Refresh()
 
-				if msg.ExitNodes.CurrentNode != "" {
-					found := false
-					for _, n := range exitNodes {
-						if n.IP == msg.ExitNodes.CurrentNode {
-							exitNodeSelect.SetSelected(n.Name)
-							statusData.Set(fmt.Sprintf("Status: Connected via %s", n.Name))
-							found = true
-							break
-						}
-					}
-					if !found {
-						exitNodeSelect.SetSelected("None (Direct)")
-						statusData.Set("Status: Connected (Direct)")
-					}
+				exitNodeSelect.SetSelected(selectedText)
+				currentSelection = strings.TrimSuffix(selectedText, " (default)")
+				if selectedText != "None (Direct)" {
+					statusData.Set(fmt.Sprintf("Status: Connected via %s", currentSelection))
 				} else {
-					exitNodeSelect.SetSelected("None (Direct)")
 					statusData.Set("Status: Connected (Direct)")
 				}
 			}
@@ -1236,8 +1375,11 @@ func runGuiMode() {
 		time.Sleep(500 * time.Millisecond)
 		addLog("Sending Init command...")
 		sendCmd(request{Cmd: CmdInit, InitID: "12345678-1234-1234-1234-1234567890ab"})
-		time.Sleep(1 * time.Second)
-		sendCmd(request{Cmd: CmdGetExitNodes})
+		time.Sleep(500 * time.Millisecond)
+		sendCmd(request{Cmd: CmdGetStatus})
+		time.Sleep(500 * time.Millisecond)
+		addLog("Auto-connecting...")
+		sendCmd(request{Cmd: CmdUp})
 		time.Sleep(2 * time.Second)
 		sendCmd(request{Cmd: CmdGetExitNodes})
 		time.Sleep(2 * time.Second)
@@ -1257,26 +1399,87 @@ func runGuiMode() {
 		sendCmd(request{Cmd: CmdGetExitNodes})
 	})
 
-	controls := container.NewVBox(
+	content := container.NewVBox(
 		statusLabel,
 		loginBtn,
 		portContainer,
 		connectBtn,
+		widget.NewSeparator(),
 		widget.NewLabel("Exit Node:"),
 		exitNodeSelect,
-		refreshBtn,
-		widget.NewLabel("Logs:"),
+		container.NewHBox(
+			saveDefaultBtn,
+			refreshBtn,
+		),
+		widget.NewSeparator(),
+		container.NewHBox(
+			widget.NewLabel("Logs:"),
+			layout.NewSpacer(),
+			widget.NewButtonWithIcon("", theme.ContentCopyIcon(), func() {
+				w.Clipboard().SetContent(richLogs.String())
+				addLog("Logs copied to clipboard.")
+			}),
+			widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
+				clearLogs()
+			}),
+		),
+		container.NewHBox(
+			func() *widget.Button {
+				var btn *widget.Button
+				update := func() {
+					if guiVerbose {
+						btn.SetText("Debug Logs: ON")
+						btn.Importance = widget.WarningImportance
+					} else {
+						btn.SetText("Debug Logs: OFF")
+						btn.Importance = widget.MediumImportance
+					}
+				}
+				btn = widget.NewButton("", func() {
+					guiVerbose = !guiVerbose
+					update()
+					if guiVerbose {
+						addLog("Detailed logging enabled.")
+					} else {
+						addLog("Detailed logging disabled.")
+					}
+				})
+				update()
+				return btn
+			}(),
+			func() *widget.Button {
+				var btn *widget.Button
+				update := func() {
+					if autoScroll {
+						btn.SetText("Auto-scroll: ON")
+						btn.Importance = widget.SuccessImportance
+					} else {
+						btn.SetText("Auto-scroll: OFF")
+						btn.Importance = widget.MediumImportance
+					}
+				}
+				btn = widget.NewButton("", func() {
+					autoScroll = !autoScroll
+					update()
+				})
+				update()
+				return btn
+			}(),
+		),
 	)
 
+	disclaimer := widget.NewLabelWithStyle("Independent Community Project - Not an official Tailscale product",
+		fyne.TextAlignCenter, fyne.TextStyle{Italic: true})
+
 	w.SetContent(container.NewBorder(
-		controls, // Top
-		nil,      // Bottom
-		nil,      // Left
-		nil,      // Right
+		content,    // Top
+		disclaimer, // Bottom
+		nil,
+		nil,
 		logScroll, // Center (expands)
 	))
 
-	w.Resize(fyne.NewSize(400, 600))
+	w.Resize(fyne.NewSize(450, 650))
 	w.ShowAndRun()
 }
 

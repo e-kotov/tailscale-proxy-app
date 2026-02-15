@@ -1,1 +1,8 @@
-TailscaleProxy.app/\n.DS_Store\n/ts-browser-ext\ntailscale-proxy
+TailscaleProxy.app/
+.DS_Store
+/ts-browser-ext
+tailscale-proxy
+proxy.pid
+stress_test.sh
+*.zip
+*.exe
