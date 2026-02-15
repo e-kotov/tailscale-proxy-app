@@ -23,6 +23,14 @@ jobs:
       - name: Fix git safe directory in container
         run: git config --global --add safe.directory /__w/${{ github.event.repository.name }}/${{ github.event.repository.name }}
 
+      - name: Check Environment
+        run: |
+          echo "Checking Cross-Compilers..."
+          which aarch64-linux-gnu-gcc || echo "aarch64-linux-gnu-gcc not found"
+          aarch64-linux-gnu-gcc --version || true
+          echo "Go Env:"
+          go env
+
       - name: Run GoReleaser
         run: goreleaser release --clean
         env:

@@ -28,21 +28,29 @@ builds:
         env:
           - CC=x86_64-linux-gnu-gcc
           - CXX=x86_64-linux-gnu-g++
+          - CC_FOR_TARGET=x86_64-linux-gnu-gcc
+          - CXX_FOR_TARGET=x86_64-linux-gnu-g++
       - goos: linux
         goarch: arm64
         env:
           - CC=aarch64-linux-gnu-gcc
           - CXX=aarch64-linux-gnu-g++
+          - CC_FOR_TARGET=aarch64-linux-gnu-gcc
+          - CXX_FOR_TARGET=aarch64-linux-gnu-g++
       - goos: windows
         goarch: amd64
         env:
           - CC=x86_64-w64-mingw32-gcc
           - CXX=x86_64-w64-mingw32-g++
+          - CC_FOR_TARGET=x86_64-w64-mingw32-gcc
+          - CXX_FOR_TARGET=x86_64-w64-mingw32-g++
       - goos: windows
         goarch: arm64
         env:
           - CC=aarch64-w64-mingw32-gcc
           - CXX=aarch64-w64-mingw32-g++
+          - CC_FOR_TARGET=aarch64-w64-mingw32-gcc
+          - CXX_FOR_TARGET=aarch64-w64-mingw32-g++
 
   - id: macos
     env:
@@ -63,11 +71,15 @@ builds:
         env:
           - CC=o64-clang
           - CXX=o64-clang++
+          - CC_FOR_TARGET=o64-clang
+          - CXX_FOR_TARGET=o64-clang++
       - goos: darwin
         goarch: arm64
         env:
           - CC=oa64-clang
           - CXX=oa64-clang++
+          - CC_FOR_TARGET=oa64-clang
+          - CXX_FOR_TARGET=oa64-clang++
 
 archives:
   - builds:
