@@ -26,27 +26,43 @@ It is a fork/adaptation of the [Tailscale Browser Extension](https://github.com/
 
 ## Installation & Usage
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/e-kotov/tailscale-proxy-app.git
-    cd tailscale-proxy-app
-    ```
+Choose the easiest way for your platform:
 
-2.  **Build the app:**
-    ```bash
-    make app
-    ```
-    *(Requires Go 1.22+ and a C compiler for Fyne)*
+### 🍎 macOS (Homebrew)
+```bash
+brew install e-kotov/tap/proxy-app-for-tailscale
+```
 
-3.  **Run:**
-    -   **macOS**: Open `TailscaleProxy.app`
-    -   **Linux/Windows**: Run the generated binary.
+### 🪟 Windows (Scoop)
+```bash
+scoop bucket add e-kotov https://github.com/e-kotov/homebrew-tap
+scoop install proxy-app-for-tailscale
+```
+*Or download the `.zip` from the [Releases](https://github.com/e-kotov/tailscale-proxy-app/releases) page.*
 
-4.  **Connect:**
-    -   Log in to Tailscale (follow the instructions in the GUI).
-    -   Select an exit node (optional).
-    -   Click **Connect**.
-    -   Configure your browser or app to use the proxy (e.g., `localhost:56789`).
+### 🐧 Linux
+**Recommended (Native):**
+Download the `.deb` or `.rpm` from the [Releases](https://github.com/e-kotov/tailscale-proxy-app/releases) page and install:
+```bash
+# Ubuntu/Debian
+sudo apt install ./proxy-app-for-tailscale.deb
+
+# Fedora/RPM
+sudo dnf install ./proxy-app-for-tailscale.rpm
+```
+
+**Homebrew (Optional):**
+```bash
+brew install e-kotov/tap/proxy-app-for-tailscale
+```
+
+## How to use
+1.  **Run:** Open the installed application.
+2.  **Connect:**
+    - Log in to Tailscale (follow the instructions in the GUI).
+    - Select an exit node (optional).
+    - Click **Connect**.
+3.  **Config:** Configure your browser or app to use the proxy (default port: `57320`).
 
 ## License
 

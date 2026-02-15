@@ -52,6 +52,9 @@ import (
 )
 
 var (
+	version       = "v0.0.2-dev"
+	commit        = "none"
+	date          = "unknown"
 	installFlag   = flag.String("install", "", "register the browser extension; string is 'C' (Chrome) or 'F' (Firefox) followed by extension ID")
 	uninstallFlag = flag.Bool("uninstall", false, "unregister the browser extension")
 	guiFlag       = flag.Bool("gui", false, "run in GUI mode")
@@ -1024,7 +1027,7 @@ func (h *host) httpProxyHandler() http.Handler {
 
 func runGuiMode() {
 	a := app.New()
-	w := a.NewWindow("Proxy App for Tailscale (Community) v0.0.2")
+	w := a.NewWindow(fmt.Sprintf("Proxy App for Tailscale (Community) %s", version))
 
 	// Host <-> GUI communication pipes
 	guiToHostR, guiToHostW := io.Pipe()

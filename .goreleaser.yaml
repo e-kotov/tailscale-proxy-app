@@ -1,0 +1,80 @@
+# .goreleaser.yaml
+version: 2
+
+project_name: proxy-app-for-tailscale
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env:
+      - CGO_ENABLED=1
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    main: .
+    flags:
+      - -tags=urfave_cli_no_docs
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+archives:
+  - format: tar.gz
+    # this name template makes the OS and Arch compatible with what users expect
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    # use zip for windows archives
+    format_overrides:
+      - goos: windows
+        format: zip
+
+nfpms:
+  - maintainer: Eugene Kotov <e.kotov@gmail.com>
+    description: Independent Community Proxy for Tailscale
+    homepage: https://github.com/e-kotov/tailscale-proxy-app
+    license: BSD-3-Clause
+    formats:
+      - deb
+      - rpm
+    overrides:
+      deb:
+        file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
+      rpm:
+        file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
+
+brews:
+  - repository:
+      owner: e-kotov
+      name: homebrew-tap
+    directory: Formula
+    homepage: https://github.com/e-kotov/tailscale-proxy-app
+    description: Independent Community Proxy for Tailscale
+    license: BSD-3-Clause
+    test: |
+      system "#{bin}/proxy-app-for-tailscale --version"
+
+scoops:
+  - repository:
+      owner: e-kotov
+      name: homebrew-tap
+    directory: bucket
+    homepage: https://github.com/e-kotov/tailscale-proxy-app
+    description: Independent Community Proxy for Tailscale
+    license: BSD-3-Clause
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
