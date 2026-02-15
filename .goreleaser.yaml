@@ -57,7 +57,7 @@ archives:
 
 nfpms:
   - maintainer: Egor Kotov <e.kotov@gmail.com>
-    description: Independent Community Proxy for Tailscale
+    description: Standalone userspace egress proxy for Tailscale exit nodes (no root required)
     homepage: https://github.com/e-kotov/tailscale-proxy-app
     license: BSD-3-Clause
     formats:
@@ -75,7 +75,7 @@ brews:
       name: homebrew-tap
     directory: Formula
     homepage: https://github.com/e-kotov/tailscale-proxy-app
-    description: Independent Community Proxy for Tailscale
+    description: Standalone userspace egress proxy for Tailscale exit nodes (no root required)
     license: BSD-3-Clause
     test: |
       system "#{bin}/proxy-app-for-tailscale --version"
@@ -86,7 +86,7 @@ scoops:
       name: homebrew-tap
     directory: bucket
     homepage: https://github.com/e-kotov/tailscale-proxy-app
-    description: Independent Community Proxy for Tailscale
+    description: Standalone userspace egress proxy for Tailscale exit nodes (no root required)
     license: BSD-3-Clause
 
 changelog:
