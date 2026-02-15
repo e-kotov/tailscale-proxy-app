@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   release:
-    name: Release Linux & Windows
+    name: Release CLI (all platforms) + GUI (Linux & Windows)
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/goreleaser/goreleaser-cross:v1.24
@@ -37,8 +37,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
-  macos:
-    name: Build macOS
+  macos-gui:
+    name: Build macOS GUI
     strategy:
       matrix:
         include:
@@ -62,32 +62,32 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Build
+      - name: Build GUI
         env:
           GOOS: darwin
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "1"
         run: |
           go build -tags=urfave_cli_no_docs \
-            -ldflags="-s -w -X main.version=${{ steps.version.outputs.version }} -X main.commit=${{ github.sha }} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            -o tailscale-proxy-app .
+            -ldflags="-s -w -X tailscale-proxy/internal/proxy.Version=${{ steps.version.outputs.version }} -X tailscale-proxy/internal/proxy.Commit=${{ github.sha }} -X tailscale-proxy/internal/proxy.Date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -o tailscale-proxy-app ./cmd/tailscale-proxy-app
           tar czf "tailscale-proxy-app_${{ steps.version.outputs.version }}_macOS_${{ matrix.arch_label }}.tar.gz" tailscale-proxy-app
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: macos-${{ matrix.goarch }}
+          name: macos-gui-${{ matrix.goarch }}
           path: "*.tar.gz"
 
   upload-macos:
     name: Upload macOS to Release
-    needs: [release, macos]
+    needs: [release, macos-gui]
     runs-on: ubuntu-latest
     steps:
-      - name: Download macOS artifacts
+      - name: Download macOS GUI artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: macos-*
+          pattern: macos-gui-*
           merge-multiple: true
 
       - name: Upload to GitHub Release
@@ -97,80 +97,77 @@ jobs:
           gh release upload "${{ github.ref_name }}" *.tar.gz --repo "${{ github.repository }}" --clobber
 
   homebrew:
-    name: Update Homebrew Formula
-    needs: [upload-macos]
+    name: Update Homebrew Formula (CLI)
+    needs: [release]
     runs-on: ubuntu-latest
     steps:
       - name: Get version from tag
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Download macOS artifacts (for checksums)
-        uses: actions/download-artifact@v4
-        with:
-          pattern: macos-*
-          merge-multiple: true
-
-      - name: Download Linux amd64 tarball checksum
+      - name: Download CLI checksums
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release download "${{ github.ref_name }}" \
-            --pattern "checksums.txt" \
-            --repo "${{ github.repository }}" || true
-          gh release download "${{ github.ref_name }}" \
-            --pattern "tailscale-proxy-app_${{ steps.version.outputs.version }}_linux_x86_64.tar.gz" \
+            --pattern "tailscale-proxy_${{ steps.version.outputs.version }}_macOS_x86_64.tar.gz" \
             --repo "${{ github.repository }}"
           gh release download "${{ github.ref_name }}" \
-            --pattern "tailscale-proxy-app_${{ steps.version.outputs.version }}_linux_arm64.tar.gz" \
+            --pattern "tailscale-proxy_${{ steps.version.outputs.version }}_macOS_arm64.tar.gz" \
+            --repo "${{ github.repository }}"
+          gh release download "${{ github.ref_name }}" \
+            --pattern "tailscale-proxy_${{ steps.version.outputs.version }}_linux_x86_64.tar.gz" \
+            --repo "${{ github.repository }}"
+          gh release download "${{ github.ref_name }}" \
+            --pattern "tailscale-proxy_${{ steps.version.outputs.version }}_linux_arm64.tar.gz" \
             --repo "${{ github.repository }}"
 
       - name: Compute checksums
         id: checksums
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          echo "mac_amd64=$(sha256sum tailscale-proxy-app_${VERSION}_macOS_x86_64.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-          echo "mac_arm64=$(sha256sum tailscale-proxy-app_${VERSION}_macOS_arm64.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-          echo "linux_amd64=$(sha256sum tailscale-proxy-app_${VERSION}_linux_x86_64.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-          echo "linux_arm64=$(sha256sum tailscale-proxy-app_${VERSION}_linux_arm64.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "mac_amd64=$(sha256sum tailscale-proxy_${VERSION}_macOS_x86_64.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "mac_arm64=$(sha256sum tailscale-proxy_${VERSION}_macOS_arm64.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "linux_amd64=$(sha256sum tailscale-proxy_${VERSION}_linux_x86_64.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "linux_arm64=$(sha256sum tailscale-proxy_${VERSION}_linux_arm64.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Generate Homebrew formula
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           REPO="e-kotov/tailscale-proxy-app"
-          cat > formula.rb << FORMULA
-          class TailscaleProxyApp < Formula
-            desc "Standalone userspace egress proxy for Tailscale exit nodes (no root required). It exposes a local HTTP/SOCKS5 proxy that routes traffic through any of your tailnet's exit nodes."
+          cat > formula.rb <<FORMULA
+          class TailscaleProxy < Formula
+            desc "Lightweight CLI proxy for Tailscale exit nodes (no root required). Exposes a local HTTP/SOCKS5 proxy."
             homepage "https://github.com/${REPO}"
             license "BSD-3-Clause"
             version "${VERSION}"
 
             on_macos do
               if Hardware::CPU.arm?
-                url "https://github.com/${REPO}/releases/download/v${VERSION}/tailscale-proxy-app_${VERSION}_macOS_arm64.tar.gz"
+                url "https://github.com/${REPO}/releases/download/v${VERSION}/tailscale-proxy_${VERSION}_macOS_arm64.tar.gz"
                 sha256 "${{ steps.checksums.outputs.mac_arm64 }}"
               else
-                url "https://github.com/${REPO}/releases/download/v${VERSION}/tailscale-proxy-app_${VERSION}_macOS_x86_64.tar.gz"
+                url "https://github.com/${REPO}/releases/download/v${VERSION}/tailscale-proxy_${VERSION}_macOS_x86_64.tar.gz"
                 sha256 "${{ steps.checksums.outputs.mac_amd64 }}"
               end
             end
 
             on_linux do
               if Hardware::CPU.arm?
-                url "https://github.com/${REPO}/releases/download/v${VERSION}/tailscale-proxy-app_${VERSION}_linux_arm64.tar.gz"
+                url "https://github.com/${REPO}/releases/download/v${VERSION}/tailscale-proxy_${VERSION}_linux_arm64.tar.gz"
                 sha256 "${{ steps.checksums.outputs.linux_arm64 }}"
               else
-                url "https://github.com/${REPO}/releases/download/v${VERSION}/tailscale-proxy-app_${VERSION}_linux_x86_64.tar.gz"
+                url "https://github.com/${REPO}/releases/download/v${VERSION}/tailscale-proxy_${VERSION}_linux_x86_64.tar.gz"
                 sha256 "${{ steps.checksums.outputs.linux_amd64 }}"
               end
             end
 
             def install
-              bin.install "tailscale-proxy-app"
+              bin.install "tailscale-proxy"
             end
 
             test do
-              system "#{bin}/tailscale-proxy-app --version"
+              system "#{bin}/tailscale-proxy --version"
             end
           end
           FORMULA
@@ -182,13 +179,85 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
-          # Clone the tap repo, update the formula, push
           git clone "https://x-access-token:${GH_TOKEN}@github.com/e-kotov/homebrew-tap.git" tap
           mkdir -p tap/Formula
-          cp formula.rb tap/Formula/tailscale-proxy-app.rb
+          cp formula.rb tap/Formula/tailscale-proxy.rb
           cd tap
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/tailscale-proxy-app.rb
-          git commit -m "Update tailscale-proxy-app to ${{ steps.version.outputs.version }}" || echo "No changes"
+          git add Formula/tailscale-proxy.rb
+          git commit -m "Update tailscale-proxy to ${{ steps.version.outputs.version }}" || echo "No changes"
+          git push
+
+  homebrew-cask:
+    name: Update Homebrew Cask (GUI)
+    needs: [upload-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download macOS GUI archives
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "${{ github.ref_name }}" \
+            --pattern "tailscale-proxy-app_${{ steps.version.outputs.version }}_macOS_x86_64.tar.gz" \
+            --repo "${{ github.repository }}"
+          gh release download "${{ github.ref_name }}" \
+            --pattern "tailscale-proxy-app_${{ steps.version.outputs.version }}_macOS_arm64.tar.gz" \
+            --repo "${{ github.repository }}"
+
+      - name: Compute checksums
+        id: checksums
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "mac_amd64=$(sha256sum tailscale-proxy-app_${VERSION}_macOS_x86_64.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "mac_arm64=$(sha256sum tailscale-proxy-app_${VERSION}_macOS_arm64.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate Homebrew cask
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          REPO="e-kotov/tailscale-proxy-app"
+          cat > cask.rb <<CASK
+          cask "tailscale-proxy-app" do
+            version "${VERSION}"
+
+            on_intel do
+              url "https://github.com/${REPO}/releases/download/v${VERSION}/tailscale-proxy-app_${VERSION}_macOS_x86_64.tar.gz"
+              sha256 "${{ steps.checksums.outputs.mac_amd64 }}"
+            end
+
+            on_arm do
+              url "https://github.com/${REPO}/releases/download/v${VERSION}/tailscale-proxy-app_${VERSION}_macOS_arm64.tar.gz"
+              sha256 "${{ steps.checksums.outputs.mac_arm64 }}"
+            end
+
+            name "Tailscale Proxy App"
+            desc "GUI proxy app for Tailscale exit nodes (no root required)"
+            homepage "https://github.com/${REPO}"
+
+            binary "tailscale-proxy-app"
+
+            zap trash: [
+              "~/.config/tailscale-proxy-app",
+            ]
+          end
+          CASK
+          sed -i 's/^          //' cask.rb
+          cat cask.rb
+
+      - name: Push cask to homebrew-tap
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/e-kotov/homebrew-tap.git" tap
+          mkdir -p tap/Casks
+          cp cask.rb tap/Casks/tailscale-proxy-app.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/tailscale-proxy-app.rb
+          git commit -m "Update tailscale-proxy-app cask to ${{ steps.version.outputs.version }}" || echo "No changes"
           git push

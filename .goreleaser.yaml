@@ -8,7 +8,26 @@ before:
     - go mod tidy
 
 builds:
-  - id: default
+  - id: cli
+    binary: tailscale-proxy
+    main: ./cmd/tailscale-proxy
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -tags=urfave_cli_no_docs
+    ldflags:
+      - -s -w -X tailscale-proxy/internal/proxy.Version={{.Version}} -X tailscale-proxy/internal/proxy.Commit={{.Commit}} -X tailscale-proxy/internal/proxy.Date={{.Date}}
+
+  - id: gui
+    binary: tailscale-proxy-app
+    main: ./cmd/tailscale-proxy-app
     env:
       - CGO_ENABLED=1
     goos:
@@ -17,11 +36,10 @@ builds:
     goarch:
       - amd64
       - arm64
-    main: .
     flags:
       - -tags=urfave_cli_no_docs
     ldflags:
-      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+      - -s -w -X tailscale-proxy/internal/proxy.Version={{.Version}} -X tailscale-proxy/internal/proxy.Commit={{.Commit}} -X tailscale-proxy/internal/proxy.Date={{.Date}}
     overrides:
       - goos: linux
         goarch: amd64
@@ -46,13 +64,30 @@ builds:
           - CXX=/llvm-mingw/bin/aarch64-w64-mingw32-g++
 
 archives:
-  - builds:
-      - default
+  - id: cli-archives
+    builds:
+      - cli
     formats:
       - tar.gz
-    # this name template makes the OS and Arch compatible with what users expect
     name_template: >-
-      {{ .ProjectName }}_{{ .Version }}_
+      tailscale-proxy_{{ .Version }}_
+      {{- if eq .Os "darwin" }}macOS
+      {{- else }}{{ .Os }}{{ end }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+  - id: gui-archives
+    builds:
+      - gui
+    formats:
+      - tar.gz
+    name_template: >-
+      tailscale-proxy-app_{{ .Version }}_
       {{- if eq .Os "darwin" }}macOS
       {{- else }}{{ .Os }}{{ end }}_
       {{- if eq .Arch "amd64" }}x86_64
@@ -65,8 +100,12 @@ archives:
           - zip
 
 nfpms:
-  - maintainer: Egor Kotov <e.kotov@gmail.com>
-    description: Standalone userspace egress proxy for Tailscale exit nodes (no root required). It exposes a local HTTP/SOCKS5 proxy that routes traffic through any of your tailnet's exit nodes.
+  - id: cli-nfpm
+    builds:
+      - cli
+    package_name: tailscale-proxy
+    maintainer: Egor Kotov <e.kotov@gmail.com>
+    description: Lightweight CLI proxy for Tailscale exit nodes (no root required). Exposes a local HTTP/SOCKS5 proxy that routes traffic through any of your tailnet's exit nodes.
     homepage: https://github.com/e-kotov/tailscale-proxy-app
     license: BSD-3-Clause
     formats:
@@ -74,18 +113,37 @@ nfpms:
       - rpm
     overrides:
       deb:
-        file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
+        file_name_template: "tailscale-proxy_{{ .Version }}_{{ .Arch }}"
       rpm:
-        file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
+        file_name_template: "tailscale-proxy_{{ .Version }}_{{ .Arch }}"
+  - id: gui-nfpm
+    builds:
+      - gui
+    package_name: tailscale-proxy-app
+    maintainer: Egor Kotov <e.kotov@gmail.com>
+    description: GUI proxy app for Tailscale exit nodes (no root required). Exposes a local HTTP/SOCKS5 proxy that routes traffic through any of your tailnet's exit nodes.
+    homepage: https://github.com/e-kotov/tailscale-proxy-app
+    license: BSD-3-Clause
+    formats:
+      - deb
+      - rpm
+    overrides:
+      deb:
+        file_name_template: "tailscale-proxy-app_{{ .Version }}_{{ .Arch }}"
+      rpm:
+        file_name_template: "tailscale-proxy-app_{{ .Version }}_{{ .Arch }}"
 
 scoops:
-  - repository:
+  - ids:
+      - cli-archives
+    name: tailscale-proxy
+    repository:
       owner: e-kotov
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: bucket
     homepage: https://github.com/e-kotov/tailscale-proxy-app
-    description: Standalone userspace egress proxy for Tailscale exit nodes (no root required). It exposes a local HTTP/SOCKS5 proxy that routes traffic through any of your tailnet's exit nodes.
+    description: Lightweight CLI proxy for Tailscale exit nodes (no root required).
     license: BSD-3-Clause
 
 changelog:

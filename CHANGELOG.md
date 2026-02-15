@@ -1,3 +1,44 @@
+# Release v0.1.0 - CLI/GUI Split
+
+> [!CAUTION]
+> **BREAKING CHANGE:** This release restructures the application into two separate binaries.
+> The internal state directory has changed, so **re-authentication is required** after upgrading.
+> Your existing `tailscale-browser-ext/` data will not be used by the new binaries.
+
+## 🔀 Architecture: Binary Split
+
+The project is now split into two independently installable programs:
+
+| Binary | Name | CGO | Description |
+|--------|------|-----|-------------|
+| **CLI** | `tailscale-proxy` | No | Lightweight CLI-only proxy (19 MB stripped) |
+| **GUI** | `tailscale-proxy-app` | Yes | Full GUI app with Fyne window (38 MB stripped) |
+
+### Installation
+
+- **Homebrew (CLI):** `brew install e-kotov/tap/tailscale-proxy`
+- **macOS GUI:** Download `tailscale-proxy-app_*_macOS_*.tar.gz` from Releases
+- **Linux/Windows:** Download from Releases or use package manager
+
+### State Directories
+
+Each binary now uses its own isolated state directory:
+
+- CLI: `~/.config/tailscale-proxy-cli/<id>/`
+- GUI: `~/.config/tailscale-proxy-app/<id>/`
+
+This means both can run simultaneously without conflicts.
+
+## 🚀 What's New
+
+- CLI builds **without CGO** — smaller binary, simpler cross-compilation
+- GUI binary is always in GUI mode — no `TS_GUI_MODE` env var needed
+- Shared core logic in `internal/proxy/` package
+- Updated GoReleaser for dual builds
+- Separate Homebrew formula for CLI
+
+---
+
 # Release v0.0.2 - Advanced GUI Controls & Stability
 
 This release introduces significant improvements to the Tailscale Proxy GUI, focusing on stateful controls, persistence, and better log management.
