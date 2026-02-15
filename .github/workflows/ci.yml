@@ -52,7 +52,7 @@ jobs:
           sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev
 
       - name: Build CLI
-        run: go build -v ./cmd/tailscale-proxy/
+        run: go build -v ./cmd/tailscale-proxy
 
       - name: Build GUI
-        run: go build -v ./cmd/tailscale-proxy-app/
+        run: go build -v ./cmd/tailscale-proxy-app
