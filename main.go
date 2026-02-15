@@ -70,7 +70,7 @@ var (
 	daemonFlag    = flag.Bool("daemon", false, "run in background")
 	stopFlag      = flag.Bool("stop", false, "stop the running daemon")
 	statusFlag    = flag.Bool("status", false, "check if the daemon is running")
-	hostnameFlag  = flag.String("hostname", "proxy-app-for-tailscale", "hostname to use for the tailscale node")
+	hostnameFlag  = flag.String("hostname", "tailscale-proxy-app", "hostname to use for the tailscale node")
 	pprofPortFlag = flag.Int("pprof-port", 0, "port for pprof debugging server (0 to disable)")
 	authKeyFlag   = flag.String("auth-key", "", "tailscale auth key to use for login")
 	logoutFlag    = flag.Bool("logout", false, "logout and remove state data")
@@ -81,7 +81,7 @@ func getConfigDir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ensureDir := filepath.Join(ucd, "proxy-app-for-tailscale")
+	ensureDir := filepath.Join(ucd, "tailscale-proxy-app")
 	if err := os.MkdirAll(ensureDir, 0700); err != nil {
 		return "", err
 	}

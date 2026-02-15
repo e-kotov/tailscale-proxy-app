@@ -33,13 +33,13 @@ Choose the easiest way for your platform:
 
 ### 🍎 macOS (Homebrew)
 ```bash
-brew install e-kotov/tap/proxy-app-for-tailscale
+brew install e-kotov/tap/tailscale-proxy-app
 ```
 
 ### 🪟 Windows (Scoop)
 ```bash
 scoop bucket add e-kotov https://github.com/e-kotov/homebrew-tap
-scoop install proxy-app-for-tailscale
+scoop install tailscale-proxy-app
 ```
 *Or download the `.zip` from the [Releases](https://github.com/e-kotov/tailscale-proxy-app/releases) page.*
 
@@ -56,7 +56,7 @@ sudo dnf install ./proxy-app-for-tailscale.rpm
 
 **Homebrew (Optional):**
 ```bash
-brew install e-kotov/tap/proxy-app-for-tailscale
+brew install e-kotov/tap/tailscale-proxy-app
 ```
 
 ## Usage Modes
@@ -77,7 +77,7 @@ Ideal for headless servers, terminal power users, or automation scripts.
 To log in, run the app interactively once. It will print a login URL if needed.
 ```bash
 # Run interactively to authenticate
-proxy-app-for-tailscale
+tailscale-proxy-app
 # Output: Auth Required! Please visit: https://login.tailscale.com/...
 ```
 *Alternatively, use a headless auth key:*

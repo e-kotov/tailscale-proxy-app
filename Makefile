@@ -1,5 +1,5 @@
 APP_NAME := TailscaleProxy.app
-BINARY_NAME := tailscale-proxy
+BINARY_NAME := tailscale-proxy-app
 CONTENTS_DIR := $(APP_NAME)/Contents
 MACOS_DIR := $(CONTENTS_DIR)/MacOS
 RESOURCES_DIR := $(CONTENTS_DIR)/Resources

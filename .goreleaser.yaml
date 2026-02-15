@@ -1,7 +1,7 @@
 # .goreleaser.yaml
 version: 2
 
-project_name: proxy-app-for-tailscale
+project_name: tailscale-proxy-app
 
 before:
   hooks:
@@ -80,7 +80,7 @@ brews:
     description: Standalone userspace egress proxy for Tailscale exit nodes (no root required). It exposes a local HTTP/SOCKS5 proxy that routes traffic through any of your tailnet's exit nodes.
     license: BSD-3-Clause
     test: |
-      system "#{bin}/proxy-app-for-tailscale --version"
+      system "#{bin}/tailscale-proxy-app --version"
 
 scoops:
   - repository:
