@@ -33,6 +33,14 @@ jobs:
           echo "Go Env:"
           go env
 
+      - name: Install X11 and OpenGL development dependencies
+        run: |
+          dpkg --add-architecture arm64
+          sed -i 's/\[arch=amd64\]/[arch=amd64,arm64]/g' /etc/apt/sources.list
+          apt-get update
+          apt-get install -y pkg-config libx11-dev libgl-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libxxf86vm-dev
+          apt-get install -y libx11-dev:arm64 libgl-dev:arm64 libxcursor-dev:arm64 libxrandr-dev:arm64 libxinerama-dev:arm64 libxi-dev:arm64 libxxf86vm-dev:arm64
+
       - name: Run GoReleaser
         run: goreleaser release --clean
         env:
