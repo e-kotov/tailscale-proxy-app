@@ -28,6 +28,8 @@ jobs:
           echo "Checking Cross-Compilers..."
           which aarch64-linux-gnu-gcc || echo "aarch64-linux-gnu-gcc not found"
           aarch64-linux-gnu-gcc --version || true
+          echo "Checking llvm-mingw compilers..."
+          ls /llvm-mingw/bin/*mingw* || echo "llvm-mingw binaries not found"
           echo "Go Env:"
           go env
 
