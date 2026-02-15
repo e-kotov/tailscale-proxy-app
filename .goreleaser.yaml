@@ -8,11 +8,25 @@ before:
     - go mod tidy
 
 builds:
-  - env:
-      - CGO_ENABLED=1
+  - id: default
+    env:
+      - CGO_ENABLED=0
     goos:
       - linux
       - windows
+    goarch:
+      - amd64
+      - arm64
+    main: .
+    flags:
+      - -tags=urfave_cli_no_docs
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+  - id: macos
+    env:
+      - CGO_ENABLED=1
+    goos:
       - darwin
     goarch:
       - amd64
@@ -25,6 +39,9 @@ builds:
 
 archives:
   - format: tar.gz
+    builds:
+      - default
+      - macos
     # this name template makes the OS and Arch compatible with what users expect
     name_template: >-
       {{ .ProjectName }}_
