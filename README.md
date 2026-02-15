@@ -48,10 +48,10 @@ scoop install tailscale-proxy-app
 Download the `.deb` or `.rpm` from the [Releases](https://github.com/e-kotov/tailscale-proxy-app/releases) page and install:
 ```bash
 # Ubuntu/Debian
-sudo apt install ./proxy-app-for-tailscale.deb
+sudo apt install ./tailscale-proxy-app.deb
 
 # Fedora/RPM
-sudo dnf install ./proxy-app-for-tailscale.rpm
+sudo dnf install ./tailscale-proxy-app.rpm
 ```
 
 **Homebrew (Optional):**
@@ -66,7 +66,7 @@ This application can be run in two modes:
 ### 🎮 GUI Mode (Default)
 Ideal for desktop users.
 ```bash
-proxy-app-for-tailscale --gui
+tailscale-proxy-app --gui
 ```
 *(On macOS, simply open the `TailscaleProxy.app`)*
 
@@ -82,29 +82,29 @@ tailscale-proxy-app
 ```
 *Alternatively, use a headless auth key:*
 ```bash
-proxy-app-for-tailscale --auth-key="tskey-auth-..."
+tailscale-proxy-app --auth-key="tskey-auth-..."
 ```
 
 **Background / Daemon Mode:**
 Once authenticated (or if using an auth-key), you can run as a background service.
 ```bash
 # Start in background
-proxy-app-for-tailscale --daemon --port=1080 --log-file=proxy.log
+tailscale-proxy-app --daemon --port=1080 --log-file=proxy.log
 
 # Check status
-proxy-app-for-tailscale --status
+tailscale-proxy-app --status
 
 # Stop the background process
-proxy-app-for-tailscale --stop
+tailscale-proxy-app --stop
 
 # Logout (clear state)
-proxy-app-for-tailscale --logout
+tailscale-proxy-app --logout
 ```
 
 **Available Flags (as of v.0.0.2 - may change closer to more stable release!):**
 - `--port`: Local port to listen on (default: `57320`).
 - `--exit-node`: Pre-select an exit node by name or IP.
-- `--hostname`: Hostname to use for the Tailscale node (default: `proxy-app-for-tailscale`).
+- `--hostname`: Hostname to use for the Tailscale node (default: `tailscale-proxy-app`).
 - `--daemon`: Run the process in the background.
 - `--stop`: Stop the running background process.
 - `--status`: Check if the background process is running.
