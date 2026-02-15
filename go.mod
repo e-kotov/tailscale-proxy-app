@@ -1,6 +1,6 @@
 module tailscale-proxy
 
-go 1.23.4
+go 1.24
 
 require (
 	fyne.io/fyne/v2 v2.7.2

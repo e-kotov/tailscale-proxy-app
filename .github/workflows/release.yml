@@ -13,7 +13,7 @@ jobs:
     name: Create Release
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/goreleaser/goreleaser-cross:v1.23
+      image: ghcr.io/goreleaser/goreleaser-cross:v1.24
     steps:
       - name: Checkout
         uses: actions/checkout@v4
