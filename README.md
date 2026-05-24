@@ -2,6 +2,7 @@
 
 ![CI](https://github.com/e-kotov/tailscale-proxy-app/actions/workflows/ci.yml/badge.svg)
 ![Release](https://github.com/e-kotov/tailscale-proxy-app/actions/workflows/release.yml/badge.svg)
+![Downloads](https://img.shields.io/github/downloads/e-kotov/tailscale-proxy-app/total)
 
 Standalone userspace egress proxies for Tailscale. Run any app through your exit nodes without root permissions or system-wide VPN settings.
 
