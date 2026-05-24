@@ -1,3 +1,13 @@
+# Unreleased
+
+## 🔄 Dependencies
+
+- Bump `tailscale.com` from `v1.80.1` to `v1.98.2`, picking up 18 upstream releases of fixes (security, MagicDNS, exit-node behavior, `tsnet`). Mirrors upstream [`tailscale/ts-browser-ext@abfff85`](https://github.com/tailscale/ts-browser-ext/commit/abfff85).
+- Bump `go` directive to `1.26.3` to match toolchain and upstream.
+- Pin `github.com/gorilla/csrf` to the stable `v1.7.3` tag.
+
+---
+
 # Release v0.1.0 - CLI/GUI Split
 
 > [!CAUTION]
