@@ -1,4 +1,6 @@
-# Unreleased
+# Release v0.1.1 - Dependency Refresh
+
+_Released 2026-05-24_
 
 ## 🔄 Dependencies
 
