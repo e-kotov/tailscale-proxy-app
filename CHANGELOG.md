@@ -1,3 +1,15 @@
+# Release v0.1.2 - Dependency Refresh
+
+_Released 2026-08-25_
+
+## 🔄 Dependencies
+
+- Bump `tailscale.com` from `v1.98.2` to `v1.102.3`, incorporating upstream tsnet improvements, exit node routing optimizations, and security updates.
+- Update `go` directive to `1.26.6` in `go.mod`.
+- Updated indirect dependencies (`wireguard-go`, `x/crypto`, `x/net`, `x/sys`, etc.).
+
+---
+
 # Release v0.1.1 - Dependency Refresh
 
 _Released 2026-05-24_
